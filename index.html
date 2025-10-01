@@ -34,6 +34,8 @@ body{
   border-radius:14px; overflow:hidden; background:#F7EFE7;
 }
 
+/* --- NOVAS CAMADAS --- */
+/* 1. Imagem "Fantasma" de Fundo (para meta visual) */
 .ghost-logo{
   position:absolute; inset:var(--pad);
   width:calc(100% - (var(--pad) * 2)); height:calc(100% - (var(--pad) * 2));
@@ -43,23 +45,22 @@ body{
   filter: grayscale(1) sepia(1) brightness(1.5);
 }
 
+/* 2. Camada de Fundo de Tijolos (preenche tudo) */
 .bricks-bg{
   position:absolute; inset:0;
 }
 
+/* 3. Camada da Frente (logo colorido com máscara) */
 .mask-layer{
   position:absolute; inset:0;
-  background:transparent;
+  background:transparent; /* Precisa ser transparente para ver o fundo */
   --mask:url('logo.png');
   -webkit-mask-image:var(--mask);   mask-image:var(--mask);
   -webkit-mask-repeat:no-repeat;    mask-repeat:no-repeat;
   -webkit-mask-position:center;     mask-position:center;
   -webkit-mask-size:contain;        mask-size:contain;
-
-  /* --- NOVO: EFEITO DE CONTORNO PARA MÁXIMO DESTAQUE --- */
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.7)) 
-          drop-shadow(0 0 2px rgba(255,255,255,0.8));
 }
+/* --- FIM DAS NOVAS CAMADAS --- */
 
 .bricks{ position:relative; width:100%; height:100% }
 .brick{
@@ -115,15 +116,12 @@ body{
 (function(){
   const qs = new URLSearchParams(location.search);
   const CONFIG = {
-    // --- VALORES FIXOS PARA FUNCIONAR EM QUALQUER LUGAR ---
-    sheetId: '1ZL3CcoMDVdQE8ooRX9L5QFqX1Rc70L9uguDxcmTJqGY',
-    logo: 'https://drive.google.com/uc?export=view&id=1DLQYFu3GsrbYLEtYr9wtfNTqFXJRqldc',
-    
-    // O restante da configuração
+    sheetId:  qs.get('sheet_id') || '1ZL3CcoMDVdQE8ooRX9L5QFqX1Rc70L9uguDxcmTJqGY',
     sheetName:qs.get('sheet')    || 'Tijolometro',
     range:    qs.get('range')    || 'A1:B2',
     goalField:  qs.get('goal_field')   || 'meta',
     raisedField:qs.get('raised_field') || 'arrecadado',
+    logo: qs.get('logo') || 'logo.png',
     cols: parseInt(qs.get('cols') || '80', 10),
     rows: parseInt(qs.get('rows') || '48',  10),
     gap: 1,
@@ -153,13 +151,8 @@ body{
   let logoImg = null, aspectSet = false;
   let bricksFg = [], bricksBg = [];
   let lastProgress = 0;
-  
-  // --- FUNÇÕES DE COR COM BOOST DE SATURAÇÃO (DE VOLTA) ---
-  function rgbToHsl(r, g, b) { r /= 255; g /= 255; b /= 255; const max = Math.max(r, g, b), min = Math.min(r, g, b); let h, s, l = (max + min) / 2; if (max === min) { h = s = 0; } else { const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min); switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; } h /= 6; } return [h, s, l]; }
-  function hslToRgb(h, s, l) { let r, g, b; if (s === 0) { r = g = b = l; } else { const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3); } return [Math.round(r*255), Math.round(g*255), Math.round(b*255)]; }
-  function boostColor(r, g, b) { const [h, s, l] = rgbToHsl(r, g, b); const newS = Math.min(1, s * 1.5); const newL = l < 0.5 ? l * 0.95 : l * 1.05; const [newR, newG, newB] = hslToRgb(h, newS, newL); return `rgb(${newR}, ${newG}, ${newB})`; }
 
-  function formatBRL(n){ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n); }
+  function formatBRL(n){ /* ... (código sem alterações) ... */ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n); }
   function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
   
   function loadLogo(src){
@@ -178,19 +171,21 @@ body{
     aspectSet = true;
   }
   
+  // NOVA FUNÇÃO: Calcula a cor média de uma área no canvas para evitar "cores erradas"
   function getAverageColor(x, y, w, h) {
     const imgData = pctx.getImageData(x, y, w, h).data;
     let r = 0, g = 0, b = 0, count = 0;
     for (let i = 0; i < imgData.length; i += 4) {
       const alpha = imgData[i + 3];
-      if (alpha > 128) {
-        r += imgData[i]; g += imgData[i + 1]; b += imgData[i + 2];
+      if (alpha > 128) { // Só considera pixels com mais de 50% de opacidade
+        r += imgData[i];
+        g += imgData[i + 1];
+        b += imgData[i + 2];
         count++;
       }
     }
-    if (count < (w*h)/4) return null;
-    const avgR = Math.round(r/count), avgG = Math.round(g/count), avgB = Math.round(b/count);
-    return boostColor(avgR, avgG, avgB); // Aplica o "boost" de saturação para cores vibrantes
+    if (count < (w*h)/4) return null; // Se menos de 25% da área do tijolo tem cor, considera transparente
+    return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
   }
 
   function colorizeBricks(){
@@ -217,14 +212,15 @@ body{
       
       if(color){
         fgFill.style.background = color;
-        bgFill.style.opacity = '0';
+        bgFill.style.opacity = '0'; // Esconde tijolo do fundo se há cor na frente
       } else {
-        fgFill.style.background = 'transparent';
-        bgFill.style.opacity = '1';
+        fgFill.style.background = 'transparent'; // Deixa tijolo da frente transparente
+        bgFill.style.opacity = '1'; // Mostra tijolo do fundo
       }
     }
   }
 
+  // ATUALIZADA: Cria e posiciona os tijolos nas DUAS camadas
   function layoutBricks(){
     ensureAspectFromLogo();
     const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight;
@@ -287,6 +283,7 @@ body{
     return [orderedFg, orderedBg];
   }
 
+  // ATUALIZADA: Aplica o progresso nas DUAS camadas
   function applyProgress(p){
     p = Math.max(0, Math.min(1, p||0)); lastProgress = p;
     const [orderFg, orderBg] = buildOrder();
@@ -317,6 +314,7 @@ body{
   }
 
   async function fetchProgress(){
+    /* ... (código sem alterações, apenas o formato da data no final) ... */
     const base = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq`;
     const params = new URLSearchParams({ tqx:'out:json', sheet:CONFIG.sheetName, range:CONFIG.range, t:Date.now()+'' });
     try{
