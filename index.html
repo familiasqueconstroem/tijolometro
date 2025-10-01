@@ -9,7 +9,7 @@
   /* Cores base */
   --grout:#EFE6DF;
   --grid:#CDBFB3;
-  --brick-bg-color: #a35a41;
+  --brick-bg-color: #a35a41; /* Cor dos tijolos de fundo (áreas vazadas) */
 
   /* Layout */
   --bg:#FFFAF5;
@@ -31,29 +31,45 @@ body{
 .gauge{
   position:relative; width:100%;
   aspect-ratio: 2 / 1;
-  border-radius:14px; overflow:hidden; background:var(--grout);
+  border-radius:14px; overflow:hidden; background:#F7EFE7;
 }
+
+/* --- NOVAS CAMADAS --- */
+/* 1. Imagem "Fantasma" de Fundo (para meta visual) */
+.ghost-logo{
+  position:absolute; inset:var(--pad);
+  width:calc(100% - (var(--pad) * 2)); height:calc(100% - (var(--pad) * 2));
+  margin:auto;
+  object-fit:contain;
+  opacity:0.12;
+  filter: grayscale(1) sepia(1) brightness(1.5);
+}
+
+/* 2. Camada de Fundo de Tijolos (preenche tudo) */
+.bricks-bg{
+  position:absolute; inset:0;
+}
+
+/* 3. Camada da Frente (logo colorido com máscara) */
 .mask-layer{
   position:absolute; inset:0;
+  background:transparent; /* Precisa ser transparente para ver o fundo */
   --mask:url('logo.png');
   -webkit-mask-image:var(--mask);   mask-image:var(--mask);
   -webkit-mask-repeat:no-repeat;    mask-repeat:no-repeat;
   -webkit-mask-position:center;     mask-position:center;
   -webkit-mask-size:contain;        mask-size:contain;
-
-  /* Efeito de "brilho" para destacar o logo do fundo */
-  filter: drop-shadow(0 0 4px rgba(255,255,255,0.7)) 
-          drop-shadow(0 0 2px rgba(255,255,255,0.8));
 }
+/* --- FIM DAS NOVAS CAMADAS --- */
+
 .bricks{ position:relative; width:100%; height:100% }
 .brick{
-  position:absolute; background:transparent;
-  border-radius:2px; overflow:hidden;
+  position:absolute; background:var(--grout); border-radius:2px; overflow:hidden;
   box-shadow: inset 0 0 0 var(--joint) var(--grid);
 }
 .brick .fill{
   position:absolute; inset:0; width:0%; height:100%;
-  background:var(--grout);
+  background:var(--brick-bg-color);
   transition:width .35s ease;
 }
 .brick.filled .fill{ width:100% }
@@ -69,7 +85,7 @@ body{
 
 .alert{
   position:absolute; left:14px; top:14px; background:#fff3cd; border:1px solid #ffe69c; color:#664d03;
-  padding:8px 10px; border-radius:10px; font-size:12px; display:none; z-index: 5;
+  padding:8px 10px; border-radius:10px; font-size:12px; display:none
 }
 .alert b{ display:block; margin-bottom:4px }
 </style>
@@ -78,9 +94,13 @@ body{
   <div class="panel">
     <div class="gauge" id="gauge">
       <div class="alert" id="logoAlert"><b>Logo não carregou</b> — coloque <code>logo.png</code> na mesma pasta.</div>
-      
+
+      <img src="logo.png" class="ghost-logo" id="ghostLogo" />
+
+      <div class="bricks-bg" id="bricksBg"></div>
+
       <div class="mask-layer">
-        <div class="bricks" id="bricks"></div>
+        <div class="bricks" id="bricksFg"></div>
       </div>
     </div>
 
@@ -96,12 +116,12 @@ body{
 (function(){
   const qs = new URLSearchParams(location.search);
   const CONFIG = {
-    sheetId: '1ZL3CcoMDVdQE8ooRX9L5QFqX1Rc70L9uguDxcmTJqGY',
-    logo: 'https://drive.google.com/uc?export=view&id=1DLQYFu3GsrbYLEtYr9wtfNTqFXJRqldc',
+    sheetId:  qs.get('sheet_id') || '1ZL3CcoMDVdQE8ooRX9L5QFqX1Rc70L9uguDxcmTJqGY',
     sheetName:qs.get('sheet')    || 'Tijolometro',
     range:    qs.get('range')    || 'A1:B2',
     goalField:  qs.get('goal_field')   || 'meta',
     raisedField:qs.get('raised_field') || 'arrecadado',
+    logo: qs.get('logo') || 'logo.png',
     cols: parseInt(qs.get('cols') || '80', 10),
     rows: parseInt(qs.get('rows') || '48',  10),
     gap: 1,
@@ -109,31 +129,36 @@ body{
     pad: qs.get('pad') != null ? parseInt(qs.get('pad'),10) : 0,
   };
 
-  if (!Number.isNaN(CONFIG.pad)) { document.documentElement.style.setProperty('--pad', CONFIG.pad + 'px'); }
+  if (!Number.isNaN(CONFIG.pad)) {
+    document.documentElement.style.setProperty('--pad', CONFIG.pad + 'px');
+  }
   document.querySelector('.mask-layer').style.setProperty('--mask', `url('${CONFIG.logo}')`);
+  document.getElementById('ghostLogo').src = CONFIG.logo;
 
   const gauge = document.getElementById('gauge');
-  const bricksEl = document.getElementById('bricks');
-  const hud = { raised: document.getElementById('hudRaised'), goal: document.getElementById('hudGoal'), pct: document.getElementById('hudPct'), updated: document.getElementById('hudUpdated') };
+  const bricksFgEl = document.getElementById('bricksFg');
+  const bricksBgEl = document.getElementById('bricksBg');
+  const hud = {
+    raised: document.getElementById('hudRaised'),
+    goal: document.getElementById('hudGoal'),
+    pct: document.getElementById('hudPct'),
+    updated: document.getElementById('hudUpdated')
+  };
   const alertBox = document.getElementById('logoAlert');
 
   const paintCanvas = document.createElement('canvas');
   const pctx = paintCanvas.getContext('2d', { willReadFrequently:true });
   let logoImg = null, aspectSet = false;
-  let bricks = [];
+  let bricksFg = [], bricksBg = [];
   let lastProgress = 0;
 
-  function rgbToHsl(r, g, b) { r /= 255; g /= 255; b /= 255; const max = Math.max(r, g, b), min = Math.min(r, g, b); let h, s, l = (max + min) / 2; if (max === min) { h = s = 0; } else { const d = max - min; s = l > 0.5 ? d / (2 - max - min) : d / (max + min); switch (max) { case r: h = (g - b) / d + (g < b ? 6 : 0); break; case g: h = (b - r) / d + 2; break; case b: h = (r - g) / d + 4; break; } h /= 6; } return [h, s, l]; }
-  function hslToRgb(h, s, l) { let r, g, b; if (s === 0) { r = g = b = l; } else { const hue2rgb = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < 1/2) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s; const p = 2 * l - q; r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3); } return [Math.round(r*255), Math.round(g*255), Math.round(b*255)]; }
-  function boostColor(r, g, b) { const [h, s, l] = rgbToHsl(r, g, b); const newS = Math.min(1, s * 1.5); const newL = l < 0.5 ? l * 0.95 : l * 1.05; const [newR, newG, newB] = hslToRgb(h, newS, newL); return `rgb(${newR}, ${newG}, ${newB})`; }
-
-  function formatBRL(n){ try{ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n); } catch(e){ return ''; } }
+  function formatBRL(n){ /* ... (código sem alterações) ... */ return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n); }
   function debounce(fn,ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
   
   function loadLogo(src){
     return new Promise(res=>{
       const im = new Image();
-      im.onload = ()=>{ logoImg = im; res(true); };
+      im.onload = ()=>{ logoImg = im; alertBox.style.display='none'; res(true); };
       im.onerror = ()=>{ alertBox.style.display='block'; res(false); };
       im.src = src + '?t=' + Date.now();
     });
@@ -146,113 +171,150 @@ body{
     aspectSet = true;
   }
   
+  // NOVA FUNÇÃO: Calcula a cor média de uma área no canvas para evitar "cores erradas"
   function getAverageColor(x, y, w, h) {
     const imgData = pctx.getImageData(x, y, w, h).data;
     let r = 0, g = 0, b = 0, count = 0;
     for (let i = 0; i < imgData.length; i += 4) {
-      if (imgData[i + 3] > 128) {
-        r += imgData[i]; g += imgData[i + 1]; b += imgData[i + 2];
+      const alpha = imgData[i + 3];
+      if (alpha > 128) { // Só considera pixels com mais de 50% de opacidade
+        r += imgData[i];
+        g += imgData[i + 1];
+        b += imgData[i + 2];
         count++;
       }
     }
-    if (count < (w*h) * 0.2) return null;
-    const avgR = Math.round(r/count), avgG = Math.round(g/count), avgB = Math.round(b/count);
-    return boostColor(avgR, avgG, avgB);
+    if (count < (w*h)/4) return null; // Se menos de 25% da área do tijolo tem cor, considera transparente
+    return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
   }
 
   function colorizeBricks(){
     if(!logoImg) return;
-    const W = bricksEl.clientWidth, H = bricksEl.clientHeight;
+    const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight;
     if(!W || !H) return;
 
     paintCanvas.width = W; paintCanvas.height = H;
     pctx.clearRect(0,0,W,H);
     const ar = logoImg.naturalWidth / logoImg.naturalHeight;
-    let dw = W, dh = W/ar; if(dh > H){ dh = H; dw = H*ar; }
+    let dw = W, dh = W/ar;
+    if(dh > H){ dh = H; dw = H*ar; }
     const dx = (W - dw)/2, dy = (H - dh)/2;
     pctx.drawImage(logoImg, dx, dy, dw, dh);
-    
-    for(const b of bricks){
-      const color = getAverageColor(b._x, b._y, b._w, b._h);
-      const fillEl = b.querySelector('.fill');
 
+    for(let i = 0; i < bricksFg.length; i++){
+      const bFg = bricksFg[i];
+      const bBg = bricksBg[i];
+      
+      const color = getAverageColor(bFg._x, bFg._y, bFg._w, bFg._h);
+      
+      const fgFill = bFg.querySelector('.fill');
+      const bgFill = bBg.querySelector('.fill');
+      
       if(color){
-        fillEl.style.background = color;
+        fgFill.style.background = color;
+        bgFill.style.opacity = '0'; // Esconde tijolo do fundo se há cor na frente
       } else {
-        fillEl.style.background = 'var(--brick-bg-color)';
+        fgFill.style.background = 'transparent'; // Deixa tijolo da frente transparente
+        bgFill.style.opacity = '1'; // Mostra tijolo do fundo
       }
     }
   }
 
+  // ATUALIZADA: Cria e posiciona os tijolos nas DUAS camadas
   function layoutBricks(){
     ensureAspectFromLogo();
-    const W = bricksEl.clientWidth, H = bricksEl.clientHeight; if(!W || !H) return;
+    const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight;
+    if(!W || !H) return;
+
     const { gap, cols, rows } = CONFIG;
     const brickW = Math.floor((W - gap*2) / cols) - gap;
     const brickH = Math.floor((H - gap*2) / rows) - gap;
-    const target = rows * cols;
 
-    if(bricks.length !== target){
-      bricksEl.innerHTML = ''; bricks = [];
-      const frag = document.createDocumentFragment();
+    const target = rows * cols;
+    if(bricksFg.length !== target){
+      bricksFgEl.innerHTML = ''; bricksBgEl.innerHTML = '';
+      bricksFg = []; bricksBg = [];
+      const fragFg = document.createDocumentFragment();
+      const fragBg = document.createDocumentFragment();
       for(let i=0;i<target;i++){
-        const el = document.createElement('div'); el.className='brick';
-        const fill = document.createElement('div'); fill.className='fill'; el.appendChild(fill);
-        frag.appendChild(el); bricks.push(el);
+        const elF = document.createElement('div'); elF.className='brick';
+        const fillF = document.createElement('div'); fillF.className='fill'; elF.appendChild(fillF);
+        fragFg.appendChild(elF); bricksFg.push(elF);
+        
+        const elB = document.createElement('div'); elB.className='brick';
+        const fillB = document.createElement('div'); fillB.className='fill'; elB.appendChild(fillB);
+        fragBg.appendChild(elB); bricksBg.push(elB);
       }
-      bricksEl.appendChild(frag);
+      bricksFgEl.appendChild(fragFg);
+      bricksBgEl.appendChild(fragBg);
     }
+
     let idx = 0;
     for(let r=0;r<rows;r++){
       const offset = (r%2===1) ? Math.floor(brickW/2) : 0;
       for(let c=0;c<cols;c++){
         const x = gap + c*(brickW+gap) + offset;
         const y = gap + r*(brickH+gap);
-        const b = bricks[idx++];
-        b.style.cssText = `left:${x}px; top:${y}px; width:${brickW}px; height:${brickH}px;`;
-        b._x = x; b._y = y; b._w = brickW; b._h = brickH;
+        
+        const bFg = bricksFg[idx];
+        bFg.style.cssText = `left:${x}px; top:${y}px; width:${brickW}px; height:${brickH}px;`;
+        bFg._x = x; bFg._y = y; bFg._w = brickW; bFg._h = brickH;
+
+        const bBg = bricksBg[idx];
+        bBg.style.cssText = `left:${x}px; top:${y}px; width:${brickW}px; height:${brickH}px;`;
+        idx++;
       }
     }
+
     colorizeBricks();
     applyProgress(lastProgress);
   }
 
   function buildOrder(){
     const { rows, cols } = CONFIG;
-    const ordered=[];
+    const orderedFg=[], orderedBg=[];
     for(let r=rows-1; r>=0; r--){
       for(let c=0; c<cols; c++){
-        ordered.push(bricks[r * cols + c]);
+        const idx = r * cols + c;
+        orderedFg.push(bricksFg[idx]);
+        orderedBg.push(bricksBg[idx]);
       }
     }
-    return ordered;
+    return [orderedFg, orderedBg];
   }
 
+  // ATUALIZADA: Aplica o progresso nas DUAS camadas
   function applyProgress(p){
     p = Math.max(0, Math.min(1, p||0)); lastProgress = p;
-    const order = buildOrder();
-    const total = order.length;
+    const [orderFg, orderBg] = buildOrder();
+    const total = orderFg.length;
     const filled = Math.floor(p*total);
     const frac   = (p*total) - filled;
 
     for(let i=0; i < total; i++){
-      const b = order[i];
-      const fill = b.querySelector('.fill');
-      b.classList.remove('filled','partial');
-      fill.style.width='0%';
+      const bFg = orderFg[i], bBg = orderBg[i];
+      const fillFg = bFg.querySelector('.fill'), fillBg = bBg.querySelector('.fill');
+      
+      bFg.classList.remove('filled','partial'); fillFg.style.width='0%';
+      bBg.classList.remove('filled','partial'); fillBg.style.width='0%';
+
       if(i < filled){
-        b.classList.add('filled');
-        fill.style.width='100%';
+        bFg.classList.add('filled'); fillFg.style.width='100%';
+        bBg.classList.add('filled'); fillBg.style.width='100%';
       }
     }
+    
     if(filled < total){
-      const b = order[filled];
-      b.classList.add('partial');
-      b.querySelector('.fill').style.width = Math.round(frac*100)+'%';
+      const bFg = orderFg[filled], bBg = orderBg[filled];
+      const fillFg = bFg.querySelector('.fill'), fillBg = bBg.querySelector('.fill');
+      const percent = Math.round(frac*100)+'%';
+      bFg.classList.add('partial'); fillFg.style.width = percent;
+      bBg.classList.add('partial'); fillBg.style.width = percent;
     }
   }
 
   async function fetchProgress(){
+    /* ... (código sem alterações, apenas o formato da data no final) ... */
     const base = `https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq`;
     const params = new URLSearchParams({ tqx:'out:json', sheet:CONFIG.sheetName, range:CONFIG.range, t:Date.now()+'' });
     try{
@@ -271,6 +333,7 @@ body{
       const goal   = Number(kv[CONFIG.goalField]   || 0);
       const raised = Number(kv[CONFIG.raisedField] || 0);
       const p = goal>0 ? (raised/goal) : 0;
+
       applyProgress(p);
       hud.raised.textContent = formatBRL(raised);
       hud.goal.textContent   = formatBRL(goal);
@@ -283,10 +346,7 @@ body{
   }
 
   window.addEventListener('resize', debounce(()=>{ layoutBricks(); }, 120));
-  loadLogo(CONFIG.logo).then(()=>{
-    ensureAspectFromLogo();
-    layoutBricks();
-  });
+  loadLogo(CONFIG.logo).then(()=>{ ensureAspectFromLogo(); layoutBricks(); });
   fetchProgress();
   setInterval(fetchProgress, CONFIG.pollMs);
 })();
