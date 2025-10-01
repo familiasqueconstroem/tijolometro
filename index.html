@@ -7,9 +7,9 @@
 <style>
 :root{
   /* Cores base */
-  --grout:#EFE6DF; /* Cor do cimento entre os tijolos */
-  --grid:#CDBFB3;  /* Cor das linhas da grade */
-  --brick-bg-color: #a35a41; /* Cor de fundo para todos os vazios */
+  --grout:#EFE6DF;
+  --grid:#CDBFB3;
+  --brick-bg-color: #a35a41;
 
   /* Layout */
   --bg:#FFFAF5;
@@ -33,6 +33,7 @@ body{
   aspect-ratio: 2 / 1;
   border-radius:14px; overflow:hidden; background:var(--grout);
 }
+
 .mask-layer{
   position:absolute; inset:0;
   --mask:url('logo.png');
@@ -41,10 +42,11 @@ body{
   -webkit-mask-position:center;     mask-position:center;
   -webkit-mask-size:contain;        mask-size:contain;
 
-  /* EFEITO DE CONTORNO PARA MÁXIMO DESTAQUE */
+  /* Efeito de "brilho" para destacar o logo do fundo */
   filter: drop-shadow(0 0 4px rgba(255,255,255,0.7)) 
           drop-shadow(0 0 2px rgba(255,255,255,0.8));
 }
+
 .bricks{ position:relative; width:100%; height:100% }
 .brick{
   position:absolute; background:transparent;
@@ -96,11 +98,8 @@ body{
 (function(){
   const qs = new URLSearchParams(location.search);
   const CONFIG = {
-    // --- VALORES FIXOS PARA FUNCIONAR EM QUALQUER LUGAR ---
     sheetId:  '1ZL3CcoMDVdQE8ooRX9L5QFqX1Rc70L9uguDxcmTJqGY',
     logo: 'https://drive.google.com/uc?export=view&id=1DLQYFu3GsrbYLEtYr9wtfNTqFXJRqldc',
-
-    // --- O restante da configuração ---
     sheetName:qs.get('sheet')    || 'Tijolometro',
     range:    qs.get('range')    || 'A1:B2',
     goalField:  qs.get('goal_field')   || 'meta',
@@ -138,7 +137,8 @@ body{
       const im = new Image();
       im.onload = ()=>{ logoImg = im; res(true); };
       im.onerror = ()=>{ alertBox.style.display='block'; res(false); };
-      im.src = src; // Não precisa mais do timestamp para evitar cache com a URL fixa
+      // --- LINHA CORRIGIDA ---
+      im.src = src + '?t=' + Date.now();
     });
   }
 
