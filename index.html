@@ -207,28 +207,98 @@ body{
     }
   }
   
-  function layoutBricks(){ ensureAspectFromLogo(); const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; if(!W || !H) return; if (CONFIG.brickPx && CONFIG.brickPx > 0) { const brickWtarget = CONFIG.brickPx; const brickHtarget = Math.round(brickWtarget * 0.6); effCols = Math.max(20, Math.floor((W - CONFIG.gap) / (brickWtarget + CONFIG.gap))); effRows = Math.max(12, Math.floor((H - CONFIG.gap) / (brickHtarget + CONFIG.gap))); } const cols = (typeof effCols === 'number' && effCols > 0) ? effCols : CONFIG.cols; const rows = (typeof effRows === 'number' && effRows > 0) ? effRows : CONFIG.rows; const gap  = CONFIG.gap; let brickW = Math.floor((W - (cols + 1) * gap) / cols); if (brickW < 2) brickW = 2; let offset = Math.floor(brickW / 2); let gridWEven = cols * brickW + (cols + 1) * gap; let gridWOdd  = gridWEven + offset; if (gridWOdd > W) { const extra  = gridWOdd - W; const reduce = Math.ceil(extra / cols); brickW = Math.max(2, brickW - reduce); offset = Math.floor(brickW / 2); gridWEven = cols * brickW + (cols + 1) * gap; gridWOdd  = gridWEven + offset; } const brickH = Math.max(2, Math.floor((H - (rows + 1) * gap) / rows)); const gridWMax = Math.max(gridWEven, gridWOdd); const startXBase = Math.max(gap, Math.floor((W - gridWMax) / 2) + gap); const total = rows * cols; if (bricksFg.length !== total){ bricksFgEl.innerHTML = ''; bricksBgEl.innerHTML = ''; bricksFg = []; bricksBg = []; const fragFg = document.createDocumentFragment(); const fragBg = document.createDocumentFragment(); for (let i=0;i<total;i++){ const elF = document.createElement('div'); elF.className='brick'; elF.appendChild(document.createElement('div')).className='fill'; fragFg.appendChild(elF); bricksFg.push(elF); const elB = document.createElement('div'); elB.className='brick'; elB.appendChild(document.createElement('div')).className='fill'; fragBg.appendChild(elB); bricksBg.push(elB); } bricksFgEl.appendChild(fragFg); bricksBgEl.appendChild(fragBg); } let idx = 0; for (let r=0; r<rows; r++){ const startX = startXBase + (r % 2 ? offset : 0); for (let c=0; c<cols; c++){ const x = startX + c * (brickW + gap); const y = gap + r * (brickH + gap); const bFg = bricksFg[idx]; bFg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`; bFg._x = x; bFg._y = y; bFg._w = brickW; bFg._h = brickH; const bBg = bricksBg[idx]; bBg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`; idx++; } } colorizeBricks(); applyProgress(lastProgress); }
+  function layoutBricks() {
+    ensureAspectFromLogo();
+    const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight;
+
+    // Correção de compatibilidade: se as dimensões ainda não foram calculadas 
+    // pelo navegador, espera 100ms e tenta de novo. Essencial para o Safari.
+    if (!W || !H) {
+      setTimeout(layoutBricks, 100);
+      return;
+    }
+
+    if (CONFIG.brickPx && CONFIG.brickPx > 0) {
+      const brickWtarget = CONFIG.brickPx;
+      const brickHtarget = Math.round(brickWtarget * 0.6);
+      effCols = Math.max(20, Math.floor((W - CONFIG.gap) / (brickWtarget + CONFIG.gap)));
+      effRows = Math.max(12, Math.floor((H - CONFIG.gap) / (brickHtarget + CONFIG.gap)));
+    }
+    const cols = (typeof effCols === 'number' && effCols > 0) ? effCols : CONFIG.cols;
+    const rows = (typeof effRows === 'number' && effRows > 0) ? effRows : CONFIG.rows;
+    const gap  = CONFIG.gap;
+    let brickW = Math.floor((W - (cols + 1) * gap) / cols);
+    if (brickW < 2) brickW = 2;
+    let offset = Math.floor(brickW / 2);
+    let gridWEven = cols * brickW + (cols + 1) * gap;
+    let gridWOdd  = gridWEven + offset;
+    if (gridWOdd > W) {
+      const extra  = gridWOdd - W;
+      const reduce = Math.ceil(extra / cols);
+      brickW = Math.max(2, brickW - reduce);
+      offset = Math.floor(brickW / 2);
+      gridWEven = cols * brickW + (cols + 1) * gap;
+      gridWOdd  = gridWEven + offset;
+    }
+    const brickH = Math.max(2, Math.floor((H - (rows + 1) * gap) / rows));
+    const gridWMax = Math.max(gridWEven, gridWOdd);
+    const startXBase = Math.max(gap, Math.floor((W - gridWMax) / 2) + gap);
+    const total = rows * cols;
+    if (bricksFg.length !== total) {
+      bricksFgEl.innerHTML = '';
+      bricksBgEl.innerHTML = '';
+      bricksFg = [];
+      bricksBg = [];
+      const fragFg = document.createDocumentFragment();
+      const fragBg = document.createDocumentFragment();
+      for (let i = 0; i < total; i++) {
+        const elF = document.createElement('div');
+        elF.className = 'brick';
+        elF.appendChild(document.createElement('div')).className = 'fill';
+        fragFg.appendChild(elF);
+        bricksFg.push(elF);
+        const elB = document.createElement('div');
+        elB.className = 'brick';
+        elB.appendChild(document.createElement('div')).className = 'fill';
+        fragBg.appendChild(elB);
+        bricksBg.push(elB);
+      }
+      bricksFgEl.appendChild(fragFg);
+      bricksBgEl.appendChild(fragBg);
+    }
+    let idx = 0;
+    for (let r = 0; r < rows; r++) {
+      const startX = startXBase + (r % 2 ? offset : 0);
+      for (let c = 0; c < cols; c++) {
+        const x = startX + c * (brickW + gap);
+        const y = gap + r * (brickH + gap);
+        const bFg = bricksFg[idx];
+        bFg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`;
+        bFg._x = x;
+        bFg._y = y;
+        bFg._w = brickW;
+        bFg._h = brickH;
+        const bBg = bricksBg[idx];
+        bBg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`;
+        idx++;
+      }
+    }
+    colorizeBricks();
+    applyProgress(lastProgress);
+  }
+
   function buildOrder(){ const cols = (typeof effCols === 'number' && effCols > 0) ? effCols : CONFIG.cols; const rows = (typeof effRows === 'number' && effRows > 0) ? effRows : CONFIG.rows; const orderedFg=[],orderedBg=[]; for(let r=rows-1;r>=0;r--){ for(let c=0;c<cols;c++){ const i=r*cols+c; orderedFg.push(bricksFg[i]); orderedBg.push(bricksBg[i]); } } return [orderedFg,orderedBg]; }
   function applyProgress(p){ p=Math.max(0,Math.min(1,p||0)); lastProgress=p; const [orderFg,orderBg]=buildOrder(); const total=orderFg.length; if (total === 0) return; const filled=Math.floor(p*total), frac=(p*total)-filled; for(let i=0;i<total;i++){ const fF=orderFg[i].querySelector('.fill'), fB=orderBg[i].querySelector('.fill'); const delay = i * 2; fF.style.transitionDelay = `${delay}ms`; fB.style.transitionDelay = `${delay}ms`; orderFg[i].classList.remove('filled','partial'); fF.style.width='0%'; orderBg[i].classList.remove('filled','partial'); fB.style.width='0%'; if(i<filled){ orderFg[i].classList.add('filled'); fF.style.width='100%'; orderBg[i].classList.add('filled'); fB.style.width='100%'; } } if(filled<total){ const fF=orderFg[filled].querySelector('.fill'), fB=orderBg[filled].querySelector('.fill'); const percent=Math.round(frac*100)+'%'; orderFg[filled].classList.add('partial'); fF.style.width=percent; orderBg[filled].classList.add('partial'); fB.style.width=percent; } }
 
   async function fetchProgress(){
-    // FUNÇÃO AJUDADORA: Converte o valor da planilha para número corretamente
+    // Função ajudadora para ler valores da planilha (com ponto ou vírgula)
     function parseValor(valorDaPlanilha) {
-      if (typeof valorDaPlanilha === 'number') {
-        return valorDaPlanilha; // Se já for um número, não faz nada
-      }
-      if (typeof valorDaPlanilha !== 'string') {
-        return 0; // Se não for número nem texto, retorna zero
-      }
-
+      if (typeof valorDaPlanilha === 'number') return valorDaPlanilha;
+      if (typeof valorDaPlanilha !== 'string') return 0;
       const textoLimpo = valorDaPlanilha.trim();
-
-      // Se o texto tem vírgula, trata como formato brasileiro (ex: "1.500,50")
       if (textoLimpo.includes(',')) {
         return parseFloat(textoLimpo.replace(/\./g, '').replace(',', '.')) || 0;
       }
-      
-      // Se não tem vírgula, trata como formato americano (ex: "1500.50")
       return parseFloat(textoLimpo) || 0;
     }
 
@@ -263,6 +333,7 @@ body{
                 const startParts = startDateStr.match(/\d+/g).map(Number);
                 const endParts = endDateStr.match(/\d+/g).map(Number);
                 
+                // Correção de data: mês em JS é 0-11, então subtraímos 1.
                 const startDate = new Date(startParts[0], startParts[1] - 1, startParts[2]);
                 const endDate = new Date(endParts[0], endParts[1] - 1, endParts[2]);
                 
