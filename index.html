@@ -10,7 +10,7 @@
   --bg: #FFFAF5;
   --grout: #E5DBD1;
   --grid: #CDBFB3;
-  --brick-bg-color: #a35a41;
+  --brick-bg-color: #a35a41; /* Cor escura original do fundo */
 
   /* Layout */
   --pad: 0px;
@@ -44,7 +44,7 @@ body{
   position:absolute; inset:var(--pad);
   width:calc(100% - (var(--pad) * 2)); height:calc(100% - (var(--pad) * 2));
   margin:auto; object-fit:contain;
-  opacity:0;
+  opacity:0; /* O logo em si é invisível, a mágica é feita no JavaScript */
   filter:grayscale(1) sepia(1) brightness(1.5);
 }
 .bricks-bg{ position:absolute; inset:0; }
@@ -52,9 +52,9 @@ body{
   position:absolute; inset:0; background:transparent;
   --mask:url('logo.png');
   -webkit-mask-image:var(--mask);    mask-image:var(--mask);
-  -webkit-mask-repeat:no-repeat;     mask-repeat:no-repeat;
-  -webkit-mask-position:center;     mask-position:center;
-  -webkit-mask-size:contain;        mask-size:contain;
+  -webkit-mask-repeat:no-repeat;      mask-repeat:no-repeat;
+  -webkit-mask-position:center;      mask-position:center;
+  -webkit-mask-size:contain;         mask-size:contain;
 }
 .bricks{ position:relative; width:100%; height:100% }
 .brick{
@@ -73,7 +73,7 @@ body{
   transition:width .35s ease;
 }
 .bricks-bg .brick .fill {
-    background: var(--brick-bg-color);
+    background: var(--brick-bg-color); /* Garante que o fundo seja o tijolo escuro */
     box-shadow: none;
 }
 .brick.filled .fill{
@@ -174,12 +174,64 @@ body{
   function mapToPalette(r,g,b, name){ const set = PALETTES[name]; if(!set) return `rgb(${r},${g},${b})`; let best=set[0], bestD=Infinity, c1={r,g,b}; for(const h of set){ const c2=hexToRgb(h); const d=dist2(c1,c2); if(d<bestD){bestD=d; best=h;} } return best; }
   function makeSampler(data, W, H){ return function px(x,y){ const xi = Math.max(0, Math.min(W-1, Math.round(x))); const yi = Math.max(0, Math.min(H-1, Math.round(y))); const i = (yi*W + xi) * 4; return [data[i], data[i+1], data[i+2], data[i+3]]; }; }
   function median(a){ const b=a.slice().sort((m,n)=>m-n); return b[Math.floor(b.length/2)]; }
-  function colorizeBricks(){ if(!logoImg) return; const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; if(!W||!H) return; paintCanvas.width=W; paintCanvas.height=H; pctx.clearRect(0,0,W,H); const ar = logoImg.naturalWidth / logoImg.naturalHeight; let dw=W, dh=W/ar; if(dh>H){ dh=H; dw=H*ar; } const dx=(W-dw)/2, dy=(H-dh)/2; pctx.drawImage(logoImg, dx, dy, dw, dh); const buf = pctx.getImageData(0,0,W,H).data; const samp = makeSampler(buf, W, H); for(let i=0;i<bricksFg.length;i++){ const bFg = bricksFg[i], bBg = bricksBg[i]; const x=bFg._x, y=bFg._y, w=bFg._w, h=bFg._h; const pts = [ [x+w/2, y+h/2],[x+1, y+1], [x+w-2, y+1], [x+1, y+h-2], [x+w-2, y+h-2], [x+w/2, y+1], [x+w/2, y+h-2], [x+1, y+h/2], [x+w-2, y+h/2] ]; const rs=[], gs=[], bs=[], as=[]; for(const [px,py] of pts){ const d=samp(px,py); rs.push(d[0]); gs.push(d[1]); bs.push(d[2]); as.push(d[3]); } const A = median(as); const fgFill = bFg.querySelector('.fill'); const bgFill = bBg.querySelector('.fill'); if (A < 100){ fgFill.style.background='transparent'; bgFill.style.opacity='1'; } else { const r=median(rs), g=median(gs), b=median(bs); const mapped = mapToPalette(r,g,b, CONFIG.palette); fgFill.style.background = mapped; bgFill.style.opacity='0'; } } }
+
+  function colorizeBricks(){
+    if(!logoImg) return;
+    const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; if(!W||!H) return;
+    paintCanvas.width=W; paintCanvas.height=H; pctx.clearRect(0,0,W,H);
+    const ar = logoImg.naturalWidth / logoImg.naturalHeight;
+    let dw=W, dh=W/ar; if(dh>H){ dh=H; dw=H*ar; }
+    const dx=(W-dw)/2, dy=(H-dh)/2;
+    pctx.drawImage(logoImg, dx, dy, dw, dh);
+    const buf = pctx.getImageData(0,0,W,H).data;
+    const samp = makeSampler(buf, W, H);
+    for(let i=0;i<bricksFg.length;i++){
+      const bFg = bricksFg[i], bBg = bricksBg[i];
+      const x=bFg._x, y=bFg._y, w=bFg._w, h=bFg._h;
+      const pts = [ [x+w/2, y+h/2],[x+1, y+1], [x+w-2, y+1], [x+1, y+h-2], [x+w-2, y+h-2], [x+w/2, y+1], [x+w/2, y+h-2], [x+1, y+h/2], [x+w-2, y+h/2] ];
+      const rs=[], gs=[], bs=[], as=[];
+      for(const [px,py] of pts){ const d=samp(px,py); rs.push(d[0]); gs.push(d[1]); bs.push(d[2]); as.push(d[3]); }
+      const A = median(as);
+      const fgFill = bFg.querySelector('.fill');
+      const bgFill = bBg.querySelector('.fill');
+      
+      if (A < 100){
+        fgFill.style.background='transparent';
+        bgFill.style.opacity='1';
+      } else {
+        const r=median(rs), g=median(gs), b=median(bs);
+        const mapped = mapToPalette(r,g,b, CONFIG.palette);
+        fgFill.style.background = mapped;
+        bgFill.style.opacity='0';
+      }
+    }
+  }
+  
   function layoutBricks(){ ensureAspectFromLogo(); const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; if(!W || !H) return; if (CONFIG.brickPx && CONFIG.brickPx > 0) { const brickWtarget = CONFIG.brickPx; const brickHtarget = Math.round(brickWtarget * 0.6); effCols = Math.max(20, Math.floor((W - CONFIG.gap) / (brickWtarget + CONFIG.gap))); effRows = Math.max(12, Math.floor((H - CONFIG.gap) / (brickHtarget + CONFIG.gap))); } const cols = (typeof effCols === 'number' && effCols > 0) ? effCols : CONFIG.cols; const rows = (typeof effRows === 'number' && effRows > 0) ? effRows : CONFIG.rows; const gap  = CONFIG.gap; let brickW = Math.floor((W - (cols + 1) * gap) / cols); if (brickW < 2) brickW = 2; let offset = Math.floor(brickW / 2); let gridWEven = cols * brickW + (cols + 1) * gap; let gridWOdd  = gridWEven + offset; if (gridWOdd > W) { const extra  = gridWOdd - W; const reduce = Math.ceil(extra / cols); brickW = Math.max(2, brickW - reduce); offset = Math.floor(brickW / 2); gridWEven = cols * brickW + (cols + 1) * gap; gridWOdd  = gridWEven + offset; } const brickH = Math.max(2, Math.floor((H - (rows + 1) * gap) / rows)); const gridWMax = Math.max(gridWEven, gridWOdd); const startXBase = Math.max(gap, Math.floor((W - gridWMax) / 2) + gap); const total = rows * cols; if (bricksFg.length !== total){ bricksFgEl.innerHTML = ''; bricksBgEl.innerHTML = ''; bricksFg = []; bricksBg = []; const fragFg = document.createDocumentFragment(); const fragBg = document.createDocumentFragment(); for (let i=0;i<total;i++){ const elF = document.createElement('div'); elF.className='brick'; elF.appendChild(document.createElement('div')).className='fill'; fragFg.appendChild(elF); bricksFg.push(elF); const elB = document.createElement('div'); elB.className='brick'; elB.appendChild(document.createElement('div')).className='fill'; fragBg.appendChild(elB); bricksBg.push(elB); } bricksFgEl.appendChild(fragFg); bricksBgEl.appendChild(fragBg); } let idx = 0; for (let r=0; r<rows; r++){ const startX = startXBase + (r % 2 ? offset : 0); for (let c=0; c<cols; c++){ const x = startX + c * (brickW + gap); const y = gap + r * (brickH + gap); const bFg = bricksFg[idx]; bFg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`; bFg._x = x; bFg._y = y; bFg._w = brickW; bFg._h = brickH; const bBg = bricksBg[idx]; bBg.style.cssText = `left:${x}px;top:${y}px;width:${brickW}px;height:${brickH}px;`; idx++; } } colorizeBricks(); applyProgress(lastProgress); }
   function buildOrder(){ const cols = (typeof effCols === 'number' && effCols > 0) ? effCols : CONFIG.cols; const rows = (typeof effRows === 'number' && effRows > 0) ? effRows : CONFIG.rows; const orderedFg=[],orderedBg=[]; for(let r=rows-1;r>=0;r--){ for(let c=0;c<cols;c++){ const i=r*cols+c; orderedFg.push(bricksFg[i]); orderedBg.push(bricksBg[i]); } } return [orderedFg,orderedBg]; }
   function applyProgress(p){ p=Math.max(0,Math.min(1,p||0)); lastProgress=p; const [orderFg,orderBg]=buildOrder(); const total=orderFg.length; if (total === 0) return; const filled=Math.floor(p*total), frac=(p*total)-filled; for(let i=0;i<total;i++){ const fF=orderFg[i].querySelector('.fill'), fB=orderBg[i].querySelector('.fill'); const delay = i * 2; fF.style.transitionDelay = `${delay}ms`; fB.style.transitionDelay = `${delay}ms`; orderFg[i].classList.remove('filled','partial'); fF.style.width='0%'; orderBg[i].classList.remove('filled','partial'); fB.style.width='0%'; if(i<filled){ orderFg[i].classList.add('filled'); fF.style.width='100%'; orderBg[i].classList.add('filled'); fB.style.width='100%'; } } if(filled<total){ const fF=orderFg[filled].querySelector('.fill'), fB=orderBg[filled].querySelector('.fill'); const percent=Math.round(frac*100)+'%'; orderFg[filled].classList.add('partial'); fF.style.width=percent; orderBg[filled].classList.add('partial'); fB.style.width=percent; } }
 
   async function fetchProgress(){
+    // FUNÇÃO AJUDADORA: Converte o valor da planilha para número corretamente
+    function parseValor(valorDaPlanilha) {
+      if (typeof valorDaPlanilha === 'number') {
+        return valorDaPlanilha; // Se já for um número, não faz nada
+      }
+      if (typeof valorDaPlanilha !== 'string') {
+        return 0; // Se não for número nem texto, retorna zero
+      }
+
+      const textoLimpo = valorDaPlanilha.trim();
+
+      // Se o texto tem vírgula, trata como formato brasileiro (ex: "1.500,50")
+      if (textoLimpo.includes(',')) {
+        return parseFloat(textoLimpo.replace(/\./g, '').replace(',', '.')) || 0;
+      }
+      
+      // Se não tem vírgula, trata como formato americano (ex: "1500.50")
+      return parseFloat(textoLimpo) || 0;
+    }
+
     const base=`https://docs.google.com/spreadsheets/d/${CONFIG.sheetId}/gviz/tq`;
     const params=new URLSearchParams({ tqx:'out:json', sheet:CONFIG.sheetName, range:CONFIG.range, t:Date.now()+'' });
     try{
@@ -190,7 +242,7 @@ body{
         const rows=data.table.rows||[];
         
         const raisedRow = rows.find(r => r.c?.[0]?.v?.toString().trim().toLowerCase() === 'arrecadado');
-        const raised = raisedRow ? Number(raisedRow.c?.[1]?.v || 0) : 0;
+        const raised = raisedRow ? parseValor(raisedRow.c?.[1]?.v) : 0;
 
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
@@ -203,15 +255,16 @@ body{
             const label = r.c?.[0]?.v?.toString().trim();
             if (!label || label.toLowerCase() === 'arrecadado') continue;
 
-            const goalValue = Number(r.c?.[1]?.v || 0);
+            const goalValue = parseValor(r.c?.[1]?.v);
             const startDateStr = r.c?.[2]?.v;
             const endDateStr = r.c?.[3]?.v;
             
             if (startDateStr && endDateStr) {
                 const startParts = startDateStr.match(/\d+/g).map(Number);
                 const endParts = endDateStr.match(/\d+/g).map(Number);
-                const startDate = new Date(startParts[0], startParts[1], startParts[2]);
-                const endDate = new Date(endParts[0], endParts[1], endParts[2]);
+                
+                const startDate = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+                const endDate = new Date(endParts[0], endParts[1] - 1, endParts[2]);
                 
                 if (hoje >= startDate && hoje <= endDate) {
                     activeGoal = goalValue;
@@ -223,9 +276,11 @@ body{
         }
 
         if (!foundActiveCampaign && rows.length > 1) {
-            const firstGoalRow = rows[1];
-            activeLabel = firstGoalRow.c?.[0]?.v?.toString().trim() || 'Meta';
-            activeGoal = Number(firstGoalRow.c?.[1]?.v || 0);
+            const firstGoalRow = rows.find(r => r.c?.[0]?.v?.toString().trim().toLowerCase() !== 'arrecadado');
+            if (firstGoalRow) {
+              activeLabel = firstGoalRow.c?.[0]?.v?.toString().trim() || 'Meta';
+              activeGoal = parseValor(firstGoalRow.c?.[1]?.v);
+            }
         }
 
         const p = activeGoal > 0 ? raised / activeGoal : 0;
