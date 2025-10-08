@@ -174,7 +174,7 @@ body{
   function makeSampler(data, W, H){ return function px(x,y){ const xi = Math.max(0, Math.min(W-1, Math.round(x))); const yi = Math.max(0, Math.min(H-1, Math.round(y))); const i = (yi*W + xi) * 4; return [data[i], data[i+1], data[i+2], data[i+3]]; }; }
   function median(a){ const b=a.slice().sort((m,n)=>m-n); return b[Math.floor(b.length/2)]; }
 
-  // ===== LÓGICA DE DESENHO RESTAURADA PARA A VERSÃO ORIGINAL =====
+  // ===== NOVA VERSÃO OTIMIZADA PARA PERFORMANCE =====
   function colorizeBricks(){
     if(!logoImg) return;
     const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; if(!W||!H) return;
@@ -185,28 +185,45 @@ body{
     pctx.drawImage(logoImg, dx, dy, dw, dh);
     const buf = pctx.getImageData(0,0,W,H).data;
     const samp = makeSampler(buf, W, H);
-    for(let i=0;i<bricksFg.length;i++){
-      const bFg = bricksFg[i], bBg = bricksBg[i];
-      const x=bFg._x, y=bFg._y, w=bFg._w, h=bFg._h;
-      const pts = [ [x+w/2, y+h/2],[x+1, y+1], [x+w-2, y+1], [x+1, y+h-2], [x+w-2, y+h-2], [x+w/2, y+1], [x+w/2, y+h-2], [x+1, y+h/2], [x+w-2, y+h/2] ];
-      const rs=[], gs=[], bs=[], as=[];
-      for(const [px,py] of pts){ const d=samp(px,py); rs.push(d[0]); gs.push(d[1]); bs.push(d[2]); as.push(d[3]); }
-      const A = median(as);
-      const fgFill = bFg.querySelector('.fill');
-      const bgFill = bBg.querySelector('.fill');
-      if (A < 100){
-        fgFill.style.background='transparent';
-        bgFill.style.opacity='1';
-      } else {
-        const r=median(rs), g=median(gs), b=median(bs);
-        const mapped = mapToPalette(r,g,b, CONFIG.palette);
-        fgFill.style.background = mapped;
-        bgFill.style.opacity='0';
+
+    let i = 0;
+    const totalBricks = bricksFg.length;
+
+    function processChunk() {
+      // Processa um lote de tijolos para não travar o navegador do celular
+      const batchSize = 500;
+      let processedInBatch = 0;
+      while (i < totalBricks && processedInBatch < batchSize) {
+        const bFg = bricksFg[i], bBg = bricksBg[i];
+        const x=bFg._x, y=bFg._y, w=bFg._w, h=bFg._h;
+        const pts = [ [x+w/2, y+h/2],[x+1, y+1], [x+w-2, y+1], [x+1, y+h-2], [x+w-2, y+h-2], [x+w/2, y+1], [x+w/2, y+h-2], [x+1, y+h/2], [x+w-2, y+h/2] ];
+        const rs=[], gs=[], bs=[], as=[];
+        for(const [px,py] of pts){ const d=samp(px,py); rs.push(d[0]); gs.push(d[1]); bs.push(d[2]); as.push(d[3]); }
+        const A = median(as);
+        const fgFill = bFg.querySelector('.fill');
+        const bgFill = bBg.querySelector('.fill');
+        if (A < 100){
+          fgFill.style.background='transparent';
+          bgFill.style.opacity='1';
+        } else {
+          const r=median(rs), g=median(gs), b=median(bs);
+          const mapped = mapToPalette(r,g,b, CONFIG.palette);
+          fgFill.style.background = mapped;
+          bgFill.style.opacity='0';
+        }
+        i++;
+        processedInBatch++;
+      }
+      
+      // Se ainda houver tijolos para processar, agenda o próximo lote
+      if (i < totalBricks) {
+        setTimeout(processChunk, 0); // Pausa para o navegador "respirar"
       }
     }
+    
+    processChunk(); // Inicia o processamento do primeiro lote
   }
   
-  // ===== LÓGICA DE LAYOUT RESTAURADA PARA A VERSÃO ORIGINAL =====
   function layoutBricks(){ 
     ensureAspectFromLogo(); 
     const W = bricksFgEl.clientWidth, H = bricksFgEl.clientHeight; 
@@ -287,14 +304,10 @@ body{
   window.addEventListener('resize', debounce(()=>{ layoutBricks(); }, 120));
   window.addEventListener('orientationchange', ()=>{ setTimeout(()=>layoutBricks(), 150); });
 
-  // ===== ORDEM DE INICIALIZAÇÃO CORRIGIDA =====
-  // Primeiro, focamos em carregar o logo e desenhar os tijolos.
   loadLogo(CONFIG.logo).then((success)=>{
     if (success) {
       ensureAspectFromLogo();
       layoutBricks();
-
-      // SÓ DEPOIS que a parte visual está pronta, buscamos os dados da planilha.
       fetchProgress();
       setInterval(fetchProgress, CONFIG.pollMs);
     }
